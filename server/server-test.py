@@ -5,7 +5,7 @@ from socket import *
 import mysql.connector as mariadb
 
 HOST = ''
-PORT = 20568
+PORT = 20566
 BUFSIZE = 1024
 ADDR = (HOST, PORT)
 mariadb_connection = mariadb.connect(user='hongdou', password='hongdou', database='hongdou_db')
@@ -59,7 +59,7 @@ while True:
             tcpCliSock.send('/successful'.encode('utf-8'))
 
         elif data == b'/test':
-            break
+            tcpCliSock.send('hi'.encode('utf-8'))
 
         elif not data:
             break

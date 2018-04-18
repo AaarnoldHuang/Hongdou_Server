@@ -4,7 +4,7 @@
 from socket import *
 
 HOST = '127.0.0.1'
-PORT = 20568
+PORT = 20566
 BUFSIZE = 1024
 ADDR = (HOST, PORT)
 
@@ -20,5 +20,4 @@ while True:
     if not data2:
         break
     print(data2.decode('utf-8'))
-
 tcpCliSock.close()
