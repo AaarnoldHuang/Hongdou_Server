@@ -18,12 +18,10 @@ class hongdouSocketsServer(socketserver.BaseRequestHandler):
                     userData = tcpCliSock.recv(BUFSIZE)
                     userInfo = userData.decode('utf-8').split(' ')
                     print(userInfo)
-                    newuser(userInfo)
-                    tcpCliSock.send('/successful'.encode('utf-8'))
-
-                elif data == b'/exit':
-                    tcpSerSock.server_close()
-                    sys.exit()
+                    if newuser(userInfo):
+                        tcpCliSock.send('/successful'.encode('utf-8'))
+                    else:
+                        tcpCliSock.send('/Failed. Name existed'.encode('utf-8'))
 
                 elif data == b'/newTable':
                     newusertable()
@@ -31,12 +29,6 @@ class hongdouSocketsServer(socketserver.BaseRequestHandler):
 
                 elif data == b'/test':
                     tcpCliSock.send('hi'.encode('utf-8'))
-
-                elif data == b'/check':
-                    tcpCliSock.send('Input a name: '.encode('utf-8'))
-                    uname = tcpCliSock.recv(BUFSIZE).decode('utf-8')
-                    userexitcheck(uname)
-                    tcpCliSock.send('ok'.encode('utf-8'))
 
                 elif not data:
                     break
@@ -65,11 +57,14 @@ def newuser(userinfo):
         if userexitcheck(userinfo[0]):
             cursor.execute("INSERT INTO hongdou_user (name, password, sex) VALUES \
             (%s, %s, %s)", [userinfo[0], userinfo[1], userinfo[2]])
+            mariadb_connection.commit()
+            cursor.close()
+            return True
+        else:
+            return False
     except mariadb.Error as error:
         print("Error: {}".format(error))
-    mariadb_connection.commit()
-    cursor.close()
-    return True
+
 
 def userexitcheck(username):
     cursor = mariadb_connection.cursor()
