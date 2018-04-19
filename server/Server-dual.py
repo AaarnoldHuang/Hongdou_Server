@@ -3,65 +3,7 @@
 
 import socketserver
 import mysql.connector as mariadb
-import sys
-
-class hongdouSocketsServer(socketserver.BaseRequestHandler):
-
-    def handle(self):
-        while True:
-            tcpCliSock = self.request
-            while True:
-                data = tcpCliSock.recv(BUFSIZE)
-                print(data)
-                if data == b'/newUser':                                     #当选择创建新用户时
-                    tcpCliSock.send('/sure'.encode('utf-8'))
-                    userData = tcpCliSock.recv(BUFSIZE)
-                    userInfo = userData.decode('utf-8').split(' ')          #分割传入信息
-                    print(userInfo)                                         #打印分割后的信息
-                    if newuser(userInfo):                                   #执行新建用户函数，执行成功给客户端发送/success
-                        tcpCliSock.send('/success'.encode('utf-8'))
-                    else:
-                        tcpCliSock.send('/Failed. Name existed'.encode('utf-8'))        #执行失败返回信息
-
-                elif data == b'/newUserTable':                                  #新建表函数，CLient中用不到，调试用
-                    newusertable()
-                    tcpCliSock.send('/success'.encode('utf-8'))
-
-                elif data == b'/newDataTable':
-                    if newdatatable():
-                        tcpCliSock.send('/success'.encode('utf-8'))
-                    else:
-                        tcpCliSock.send('/Failed'.encode('utf-8'))
-
-                elif data == b'/newMessage':
-                    tcpCliSock.send('/sure'.encode('utf-8'))
-                    userData = tcpCliSock.recv(BUFSIZE)
-                    userInfo = userData.decode('utf-8').split(' ')          #传入格式： 用户名 匿名性 标题
-                    print(userInfo)
-                    tcpCliSock.send('/GotInfo'.encode('utf-8'))
-                    messages = tcpCliSock.recv(BUFSIZE).decode('utf-8')     #确认后传入留言内容
-                    print(messages)
-                    if newMessage(userInfo, messages):
-                        tcpCliSock.send('/success'.encode('utf-8'))
-                    else:
-                        tcpCliSock.send('Failed'.encode('utf-8'))
-
-                elif data == b'/login':
-                    tcpCliSock.send('/sure'.encode('utf-8'))
-                    userData = tcpCliSock.recv(BUFSIZE)
-                    userInfo = userData.decode('utf-8').split(' ')
-                    if login(userInfo):
-                        tcpCliSock.send('/success'.encode('utf-8'))
-                    else:
-                        tcpCliSock.send('/Failed'.encode('utf-8'))
-
-                elif data == b'/test':                                      #测试连接，链接正常返回b'hi'
-                    tcpCliSock.send('hi'.encode('utf-8'))
-
-                elif not data:
-                    break
-            tcpCliSock.close()
-        tcpSerSock.server_close()
+import json
 
 #新建用户表函数
 def newusertable():
@@ -103,6 +45,7 @@ def newuser(userinfo):
     except mariadb.Error as error:
         print("Error: {}".format(error))
 
+#登录函数
 def login(userinfo):
     cursor = mariadb_connection.cursor()
     try:
@@ -112,8 +55,10 @@ def login(userinfo):
         passwd = data[0]
         print(data)
         if passwd[1] == userinfo[1]:
+            cursor.close()
             return True
         else:
+            cursor.close()
             return False
     except mariadb.Error as error:
         print("Error: {}".format(error))
@@ -124,27 +69,137 @@ def userexitcheck(username):
     try:
         cursor.execute("SELECT name FROM hongdou_user WHERE name = %s", (username,))
         if not cursor.fetchall():
+            cursor.close()
             return True
         else:
+            cursor.close()
             return False
     except mariadb.Error as error:
         print("Error: {}".format(error))
 
+#发布新留言函数
 def newMessage(userinfo, message):
     cursor = mariadb_connection.cursor()
     try:
         cursor.execute("INSERT INTO hongdou_data (name, anonymous, likes, title, message) \
-        VALUES (%s, %s, %s, %s, %s)", [userinfo[0], userinfo[1], 0, userinfo[2], message])
+        VALUES (%s, %s, %s, %s, %s)", (userinfo[0], userinfo[1], 0, userinfo[2], message))
         mariadb_connection.commit()
         cursor.close()
         return True
     except mariadb.Error as error:
         print("Error: {}".format(error))
 
+#返回留言到客户端函数
+def getMessages(offset):
+    cursor = mariadb_connection.cursor()
+    try:
+        cmd = "SELECT id, name, anonymous, likes, title FROM \
+        hongdou_data LIMIT 10 OFFSET %s" % (offset)
+        cursor.execute(cmd)
+        messagesdata = cursor.fetchall()
+        cursor.close()
+        return messagesdata
+    except mariadb.Error as error:
+        print("Error: {}".format(error))
+
+#返回详细留言函数
+def getDetals(id):
+    cursor = mariadb_connection.cursor()
+    try:
+        cmdofGetDetals = "SELECT message FROM hongdou_data WHERE id = %s" % (id)
+        cursor.execute(cmdofGetDetals)
+        messageDetal = cursor.fetchall()
+        return messageDetal
+    except mariadb.Error as error:
+        print("Error: {}".format(error))
+
+def liked(id):
+    cursor = mariadb_connection.cursor()
+    cursor.execute("UPDATE hongdou_data SET id=id+1 WHERE id=%s", (id,))
+    mariadb_connection.commit()
+    cursor.close()
+    return True
+
+class hongdouSocketsServer(socketserver.BaseRequestHandler):
+
+    def handle(self):
+        while True:
+            tcpCliSock = self.request
+            while True:
+                data = tcpCliSock.recv(BUFSIZE)
+                print(data)
+                if data == b'/newUserTable':                                  #新建表函数，CLient中用不到，调试用
+                    newusertable()
+                    tcpCliSock.send('/success'.encode('utf-8'))
+
+                elif data == b'/newDataTable':
+                    if newdatatable():
+                        tcpCliSock.send('/success'.encode('utf-8'))
+                    else:
+                        tcpCliSock.send('/Failed'.encode('utf-8'))
+
+                elif data == b'/newUser':                                     #当选择创建新用户时
+                    tcpCliSock.send('/sure'.encode('utf-8'))
+                    userSigninInfo = tcpCliSock.recv(BUFSIZE).decode('utf-8').split(' ')        #分割传入信息
+                    print(userSigninInfo)                                         #打印分割后的信息
+                    if newuser(userSigninInfo):                                   #执行新建用户函数，执行成功给客户端发送/success
+                        tcpCliSock.send('/success'.encode('utf-8'))
+                    else:
+                        tcpCliSock.send('/Failed. Name existed'.encode('utf-8'))        #执行失败返回信息
+
+                elif data == b'/login':
+                    tcpCliSock.send('/sure'.encode('utf-8'))
+                    userData = tcpCliSock.recv(BUFSIZE)
+                    userInfo = userData.decode('utf-8').split(' ')
+                    if login(userInfo):
+                        tcpCliSock.send('/success'.encode('utf-8'))
+                    else:
+                        tcpCliSock.send('/Failed'.encode('utf-8'))
+
+                elif data == b'/newMessage':
+                    tcpCliSock.send('/sure'.encode('utf-8'))
+                    userNewMessgae = tcpCliSock.recv(BUFSIZE).decode('utf-8').split(' ')        #传入格式： 用户名 匿名性 标题
+                    print(userNewMessgae)
+                    tcpCliSock.send('/GotInfo'.encode('utf-8'))
+                    messages = tcpCliSock.recv(BUFSIZE).decode('utf-8')     #确认后传入留言内容
+                    print(messages)
+                    if newMessage(userNewMessgae, messages):
+                        tcpCliSock.send('/success'.encode('utf-8'))
+                    else:
+                        tcpCliSock.send('Failed'.encode('utf-8'))
+
+                elif data == b'/getMessages':                               #返回首页的10个留言
+                    tcpCliSock.send('/sure'.encode('utf-8'))
+                    userGetMessages = tcpCliSock.recv(BUFSIZE).decode('utf-8')
+                    messagesInfo = getMessages(userGetMessages)
+                    messagesInfoJson = json.dumps(messagesInfo)
+                    print(messagesInfoJson)
+                    tcpCliSock.send(messagesInfoJson.encode('utf-8'))
+
+                elif data == b'/getDetals':
+                    tcpCliSock.send('/sure'.encode('utf-8'))
+                    idOfDetals = tcpCliSock.recv(BUFSIZE).decode('utf-8')
+                    messageDetal = json.dumps(getDetals(idOfDetals))
+                    print(messageDetal)
+                    tcpCliSock.send(messageDetal.encode('utf-8'))
+
+                elif data == b'/test':                                      #测试连接，链接正常返回b'hi'
+                    tcpCliSock.send('hi'.encode('utf-8'))
+
+                elif not data:
+                    break
+
+                else:
+                    tcpCliSock.send('Check ur code plz!'.encode('utf-8'))
+
+            tcpCliSock.close()
+        tcpSerSock.server_close()
+
+
 #主函数
 if __name__ == '__main__':
     HOST = ''
-    PORT = 20566
+    PORT = 20565
     BUFSIZE = 1024
     mariadb_connection = mariadb.connect(user='hongdou', password='hongdou', database='hongdou_db')
     tcpSerSock = socketserver.ThreadingTCPServer((HOST, PORT), hongdouSocketsServer)
