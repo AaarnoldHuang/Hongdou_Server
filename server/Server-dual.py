@@ -9,8 +9,8 @@ import json
 def newusertable():
     cursor = mariadb_connection.cursor()
     try:
-        cursor.execute("CREATE TABLE hongdou_user (id int primary key, name varchar(20), \
-        password varchar(20), sex varchar(6), postNum int)")
+        cursor.execute("CREATE TABLE hongdou_user (id int AUTO_INCREMENT, name varchar(20), \
+        password varchar(20), sex varchar(6), postNum int, primary key(id))")
         mariadb_connection.commit()
         cursor.close()
     except mariadb.Error as error:
@@ -109,18 +109,25 @@ def getDetals(id):
         cmdofGetDetals = "SELECT message FROM hongdou_data WHERE id = %s" % (id)
         cursor.execute(cmdofGetDetals)
         messageDetal = cursor.fetchall()
+        cursor.close()
         return messageDetal
     except mariadb.Error as error:
         print("Error: {}".format(error))
 
+#点赞
 def liked(id):
     cursor = mariadb_connection.cursor()
-    cursor.execute("UPDATE hongdou_data SET id=id+1 WHERE id=%s", (id,))
-    mariadb_connection.commit()
-    cursor.close()
-    return True
+    try:
+        cmdofLiked = "UPDATE hongdou_data SET likes=likes+1 WHERE id=%s" % (id)
+        #cursor.execute("UPDATE hongdou_data SET id=id+1 WHERE id=%s", (id,))
+        cursor.execute(cmdofLiked)
+        mariadb_connection.commit()
+        cursor.close()
+        return True
+    except mariadb.Error as error:
+        print("Error: {}".format(error))
 
-class hongdouSocketsServer(socketserver.BaseRequestHandler):
+class hongdouSocketsServer(socketserver.BaseRequestHandler):            #不要动
 
     def handle(self):
         while True:
@@ -176,12 +183,20 @@ class hongdouSocketsServer(socketserver.BaseRequestHandler):
                     print(messagesInfoJson)
                     tcpCliSock.send(messagesInfoJson.encode('utf-8'))
 
-                elif data == b'/getDetals':
+                elif data == b'/getDetals':                                #返回内容详情
                     tcpCliSock.send('/sure'.encode('utf-8'))
                     idOfDetals = tcpCliSock.recv(BUFSIZE).decode('utf-8')
                     messageDetal = json.dumps(getDetals(idOfDetals))
                     print(messageDetal)
                     tcpCliSock.send(messageDetal.encode('utf-8'))
+
+                elif data == b'/liked':
+                    tcpCliSock.send('/sure'.encode('utf-8'))
+                    idOfLiked = tcpCliSock.recv(BUFSIZE).decode('utf-8')
+                    if liked(idOfLiked):
+                        tcpCliSock.send('/Success'.encode('utf-8'))
+                    else:
+                        tcpCliSock.send('/Failed'.encode('utf-8'))
 
                 elif data == b'/test':                                      #测试连接，链接正常返回b'hi'
                     tcpCliSock.send('hi'.encode('utf-8'))
@@ -190,7 +205,7 @@ class hongdouSocketsServer(socketserver.BaseRequestHandler):
                     break
 
                 else:
-                    tcpCliSock.send('Check ur code plz!'.encode('utf-8'))
+                    tcpCliSock.send('Check ur code plz!'.encode('utf-8'))  #信令输入错误
 
             tcpCliSock.close()
         tcpSerSock.server_close()
@@ -199,7 +214,7 @@ class hongdouSocketsServer(socketserver.BaseRequestHandler):
 #主函数
 if __name__ == '__main__':
     HOST = ''
-    PORT = 20565
+    PORT = 20566
     BUFSIZE = 1024
     mariadb_connection = mariadb.connect(user='hongdou', password='hongdou', database='hongdou_db')
     tcpSerSock = socketserver.ThreadingTCPServer((HOST, PORT), hongdouSocketsServer)
